@@ -5,6 +5,9 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.showCommandBar) private var showCommandBar = true
     @AppStorage(SettingsKeys.commandBarStyle) private var commandBarStyle: CommandBarStyle = .iconAndText
 
+    @State private var hasFullDiskAccess = PermissionsService.hasFullDiskAccess()
+    @State private var showFDAGuide = false
+
     var body: some View {
         Form {
             Section("Панель инструментов") {
@@ -20,10 +23,27 @@ struct SettingsView: View {
             Section("Предпросмотр") {
                 Toggle("Показывать панель предпросмотра справа", isOn: $showPreviewPane)
             }
+
+            Section("Доступ к диску") {
+                HStack {
+                    Circle()
+                        .fill(hasFullDiskAccess ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(hasFullDiskAccess ? "Full Disk Access разрешён" : "Full Disk Access не разрешён")
+                    Spacer()
+                    Button("Гайд") { showFDAGuide = true }
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 380, height: 260)
+        .frame(width: 380, height: 340)
+        .onAppear { hasFullDiskAccess = PermissionsService.hasFullDiskAccess() }
+        .sheet(isPresented: $showFDAGuide, onDismiss: {
+            hasFullDiskAccess = PermissionsService.hasFullDiskAccess()
+        }) {
+            FullDiskAccessGuideView()
+        }
     }
 }
 

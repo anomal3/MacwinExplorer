@@ -4,6 +4,7 @@ enum SettingsKeys {
     static let showPreviewPane = "showPreviewPane"
     static let showCommandBar = "showCommandBar"
     static let commandBarStyle = "commandBarStyle"
+    static let dontShowFDAGuide = "dontShowFDAGuide"
 }
 
 /// Mirrors the three options macOS's own toolbar customization sheet offers.

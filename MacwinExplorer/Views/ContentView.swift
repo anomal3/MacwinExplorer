@@ -7,10 +7,12 @@ struct ContentView: View {
     @State private var fileList = FileListViewModel()
     @State private var propertiesRequest: PropertiesRequest?
     @State private var renameRequested = false
+    @State private var showFDAGuide = false
 
     @AppStorage(SettingsKeys.showPreviewPane) private var showPreviewPane = true
     @AppStorage(SettingsKeys.showCommandBar) private var showCommandBar = true
     @AppStorage(SettingsKeys.commandBarStyle) private var commandBarStyle: CommandBarStyle = .iconAndText
+    @AppStorage(SettingsKeys.dontShowFDAGuide) private var dontShowFDAGuide = false
 
     var body: some View {
         NavigationSplitView {
@@ -81,6 +83,12 @@ struct ContentView: View {
         .onAppear {
             sidebar.reload()
             reloadCurrentDirectory()
+            if !dontShowFDAGuide && !PermissionsService.hasFullDiskAccess() {
+                showFDAGuide = true
+            }
+        }
+        .sheet(isPresented: $showFDAGuide) {
+            FullDiskAccessGuideView()
         }
         .alert(
             "Ошибка",
