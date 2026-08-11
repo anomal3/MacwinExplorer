@@ -50,6 +50,7 @@ final class ExplorerTableView: NSTableView {
 
 struct FileTableView: NSViewRepresentable {
     let viewModel: FileListViewModel
+    let favoritesStore: FavoritesStore
     var currentDirectory: URL
     @Binding var renameRequested: Bool
     var onNavigate: (URL) -> Void
@@ -105,6 +106,7 @@ struct FileTableView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.viewModel = viewModel
+        context.coordinator.favoritesStore = favoritesStore
         context.coordinator.currentDirectory = currentDirectory
         context.coordinator.onNavigate = onNavigate
         context.coordinator.onOpenFile = onOpenFile
@@ -121,6 +123,7 @@ struct FileTableView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator {
         Coordinator(
             viewModel: viewModel,
+            favoritesStore: favoritesStore,
             currentDirectory: currentDirectory,
             onNavigate: onNavigate,
             onOpenFile: onOpenFile,
@@ -130,6 +133,7 @@ struct FileTableView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
         var viewModel: FileListViewModel
+        var favoritesStore: FavoritesStore
         var currentDirectory: URL
         var onNavigate: (URL) -> Void
         var onOpenFile: (URL) -> Void
@@ -138,12 +142,14 @@ struct FileTableView: NSViewRepresentable {
 
         init(
             viewModel: FileListViewModel,
+            favoritesStore: FavoritesStore,
             currentDirectory: URL,
             onNavigate: @escaping (URL) -> Void,
             onOpenFile: @escaping (URL) -> Void,
             onShowProperties: @escaping ([FileSystemItem]) -> Void
         ) {
             self.viewModel = viewModel
+            self.favoritesStore = favoritesStore
             self.currentDirectory = currentDirectory
             self.onNavigate = onNavigate
             self.onOpenFile = onOpenFile
@@ -305,6 +311,30 @@ struct FileTableView: NSViewRepresentable {
                 let item = viewModel.sortedItems[row]
                 let openItem = menu.addItem(withTitle: item.isDirectory ? "Открыть" : "Открыть", action: #selector(openContextItem), keyEquivalent: "")
                 openItem.target = self
+
+                let terminalItem = NSMenuItem(title: "Терминал", action: nil, keyEquivalent: "")
+                let terminalSubmenu = NSMenu()
+                let terminalDirectory = item.isDirectory ? item.url : item.url.deletingLastPathComponent()
+                let newWindowItem = terminalSubmenu.addItem(withTitle: "Новое окно", action: #selector(openTerminalWindowAction(_:)), keyEquivalent: "")
+                newWindowItem.target = self
+                newWindowItem.representedObject = terminalDirectory
+                let newTabItem = terminalSubmenu.addItem(withTitle: "Новая вкладка", action: #selector(openTerminalTabAction(_:)), keyEquivalent: "")
+                newTabItem.target = self
+                newTabItem.representedObject = terminalDirectory
+                terminalItem.submenu = terminalSubmenu
+                menu.addItem(terminalItem)
+
+                if item.isDirectory {
+                    let alreadyFavorite = favoritesStore.contains(item.url)
+                    let favoriteItem = menu.addItem(
+                        withTitle: alreadyFavorite ? "Уже в избранном" : "Добавить в избранное",
+                        action: alreadyFavorite ? nil : #selector(addFavoriteContextAction(_:)),
+                        keyEquivalent: ""
+                    )
+                    favoriteItem.target = self
+                    favoriteItem.isEnabled = !alreadyFavorite
+                    favoriteItem.representedObject = item.url
+                }
                 menu.addItem(.separator())
 
                 let cutItem = menu.addItem(withTitle: "Вырезать", action: #selector(cutContextAction), keyEquivalent: "")
@@ -331,6 +361,18 @@ struct FileTableView: NSViewRepresentable {
             } else {
                 let newFolderItem = menu.addItem(withTitle: "Новая папка", action: #selector(newFolderContextAction), keyEquivalent: "")
                 newFolderItem.target = self
+
+                let terminalItem = NSMenuItem(title: "Терминал", action: nil, keyEquivalent: "")
+                let terminalSubmenu = NSMenu()
+                let newWindowItem = terminalSubmenu.addItem(withTitle: "Новое окно", action: #selector(openTerminalWindowAction(_:)), keyEquivalent: "")
+                newWindowItem.target = self
+                newWindowItem.representedObject = currentDirectory
+                let newTabItem = terminalSubmenu.addItem(withTitle: "Новая вкладка", action: #selector(openTerminalTabAction(_:)), keyEquivalent: "")
+                newTabItem.target = self
+                newTabItem.representedObject = currentDirectory
+                terminalItem.submenu = terminalSubmenu
+                menu.addItem(terminalItem)
+
                 if ClipboardService.canPaste {
                     let pasteItem = menu.addItem(withTitle: "Вставить", action: #selector(pasteContextAction), keyEquivalent: "")
                     pasteItem.target = self
@@ -351,5 +393,20 @@ struct FileTableView: NSViewRepresentable {
         @objc private func renameContextAction() { startRenameSelected() }
         @objc private func propertiesContextAction() { onShowProperties(viewModel.selectedItems) }
         @objc private func newFolderContextAction() { viewModel.performNewFolder(in: currentDirectory) }
+
+        @objc private func addFavoriteContextAction(_ sender: NSMenuItem) {
+            guard let url = sender.representedObject as? URL else { return }
+            favoritesStore.add(url)
+        }
+
+        @objc private func openTerminalWindowAction(_ sender: NSMenuItem) {
+            guard let url = sender.representedObject as? URL else { return }
+            TerminalService.openNewWindow(at: url)
+        }
+
+        @objc private func openTerminalTabAction(_ sender: NSMenuItem) {
+            guard let url = sender.representedObject as? URL else { return }
+            TerminalService.openNewTab(at: url)
+        }
     }
 }

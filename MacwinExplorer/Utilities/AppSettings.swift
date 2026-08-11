@@ -5,6 +5,17 @@ enum SettingsKeys {
     static let showCommandBar = "showCommandBar"
     static let commandBarStyle = "commandBarStyle"
     static let dontShowFDAGuide = "dontShowFDAGuide"
+    static let fileViewMode = "fileViewMode"
+    static let confirmBeforeQuit = "confirmBeforeQuit"
+    static let showMenuBarIcon = "showMenuBarIcon"
+    static let newWindowHotKeyCode = "newWindowHotKeyCode"
+    static let newWindowHotKeyModifiers = "newWindowHotKeyModifiers"
+}
+
+/// Windows-Explorer-style "Large icons" vs "Details" view switch.
+enum FileViewMode: String, CaseIterable {
+    case details
+    case icons
 }
 
 /// Mirrors the three options macOS's own toolbar customization sheet offers.

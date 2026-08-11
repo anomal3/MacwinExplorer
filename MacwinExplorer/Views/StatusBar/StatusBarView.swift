@@ -3,6 +3,7 @@ import SwiftUI
 struct StatusBarView: View {
     let fileList: FileListViewModel
     let currentDirectory: URL
+    @Binding var viewMode: FileViewMode
 
     private var itemCountText: String {
         let count = fileList.items.count
@@ -31,6 +32,11 @@ struct StatusBarView: View {
             if let freeSpaceText {
                 Text(freeSpaceText)
             }
+            Divider().frame(height: 12)
+            HStack(spacing: 6) {
+                viewModeButton(.details, systemImage: "list.bullet", help: "Список")
+                viewModeButton(.icons, systemImage: "square.grid.2x2", help: "Крупные значки")
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -38,5 +44,15 @@ struct StatusBarView: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    @ViewBuilder
+    private func viewModeButton(_ mode: FileViewMode, systemImage: String, help: String) -> some View {
+        Button { viewMode = mode } label: {
+            Image(systemName: systemImage)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(viewMode == mode ? Color.accentColor : Color.secondary)
+        .help(help)
     }
 }

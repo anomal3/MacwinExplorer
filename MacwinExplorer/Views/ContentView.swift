@@ -2,23 +2,38 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
+    let favoritesStore: FavoritesStore
+    let networkSharesStore: NetworkSharesStore
+
     @State private var navigation = NavigationViewModel()
-    @State private var sidebar = SidebarViewModel()
+    @State private var sidebar: SidebarViewModel
     @State private var fileList = FileListViewModel()
     @State private var propertiesRequest: PropertiesRequest?
     @State private var renameRequested = false
     @State private var showFDAGuide = false
+    @State private var showConnectNetworkShare = false
 
     @AppStorage(SettingsKeys.showPreviewPane) private var showPreviewPane = true
     @AppStorage(SettingsKeys.showCommandBar) private var showCommandBar = true
     @AppStorage(SettingsKeys.commandBarStyle) private var commandBarStyle: CommandBarStyle = .iconAndText
     @AppStorage(SettingsKeys.dontShowFDAGuide) private var dontShowFDAGuide = false
+    @AppStorage(SettingsKeys.fileViewMode) private var viewMode: FileViewMode = .details
+
+    @Environment(\.openWindow) private var openWindow
+
+    init(favoritesStore: FavoritesStore, networkSharesStore: NetworkSharesStore) {
+        self.favoritesStore = favoritesStore
+        self.networkSharesStore = networkSharesStore
+        _sidebar = State(initialValue: SidebarViewModel(favoritesStore: favoritesStore, networkSharesStore: networkSharesStore))
+    }
 
     var body: some View {
         NavigationSplitView {
-            SidebarOutlineView(viewModel: sidebar) { url in
-                navigate(to: url)
-            }
+            SidebarOutlineView(
+                viewModel: sidebar,
+                onSelect: { url in navigate(to: url) },
+                onConnectNetworkShare: { showConnectNetworkShare = true }
+            )
             .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
         } detail: {
             HStack(spacing: 0) {
@@ -56,16 +71,32 @@ struct ContentView: View {
                         )
                     }
 
-                    FileTableView(
-                        viewModel: fileList,
-                        currentDirectory: navigation.currentURL,
-                        renameRequested: $renameRequested,
-                        onNavigate: { url in navigate(to: url) },
-                        onOpenFile: { url in NSWorkspace.shared.open(url) },
-                        onShowProperties: { items in showProperties(for: items) }
-                    )
+                    Group {
+                        switch viewMode {
+                        case .details:
+                            FileTableView(
+                                viewModel: fileList,
+                                favoritesStore: favoritesStore,
+                                currentDirectory: navigation.currentURL,
+                                renameRequested: $renameRequested,
+                                onNavigate: { url in navigate(to: url) },
+                                onOpenFile: { url in NSWorkspace.shared.open(url) },
+                                onShowProperties: { items in showProperties(for: items) }
+                            )
+                        case .icons:
+                            IconGridView(
+                                viewModel: fileList,
+                                favoritesStore: favoritesStore,
+                                currentDirectory: navigation.currentURL,
+                                onNavigate: { url in navigate(to: url) },
+                                onOpenFile: { url in NSWorkspace.shared.open(url) },
+                                onShowProperties: { items in showProperties(for: items) }
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    StatusBarView(fileList: fileList, currentDirectory: navigation.currentURL)
+                    StatusBarView(fileList: fileList, currentDirectory: navigation.currentURL, viewMode: $viewMode)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -83,12 +114,26 @@ struct ContentView: View {
         .onAppear {
             sidebar.reload()
             reloadCurrentDirectory()
+            networkSharesStore.reconnectAutoMountShares()
             if !dontShowFDAGuide && !PermissionsService.hasFullDiskAccess() {
                 showFDAGuide = true
             }
+            GlobalHotKeyService.shared.onTrigger = {
+                openWindow(id: "main")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFavorite)) { notification in
+            guard let url = notification.object as? URL else { return }
+            navigate(to: url)
         }
         .sheet(isPresented: $showFDAGuide) {
             FullDiskAccessGuideView()
+        }
+        .sheet(isPresented: $showConnectNetworkShare) {
+            ConnectNetworkShareView(networkSharesStore: networkSharesStore) { mountedURL in
+                sidebar.reload()
+                navigate(to: mountedURL)
+            }
         }
         .alert(
             "Ошибка",
@@ -134,5 +179,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(favoritesStore: FavoritesStore(), networkSharesStore: NetworkSharesStore())
 }
