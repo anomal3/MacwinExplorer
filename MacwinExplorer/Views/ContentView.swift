@@ -32,7 +32,10 @@ struct ContentView: View {
             SidebarOutlineView(
                 viewModel: sidebar,
                 onSelect: { url in navigate(to: url) },
-                onConnectNetworkShare: { showConnectNetworkShare = true }
+                onConnectNetworkShare: { showConnectNetworkShare = true },
+                onDropFiles: { urls, destination, move in
+                    fileList.performDrop(urls: urls, into: destination, move: move, currentDirectory: navigation.currentURL)
+                }
             )
             .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
         } detail: {

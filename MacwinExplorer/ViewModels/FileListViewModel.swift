@@ -110,4 +110,23 @@ final class FileListViewModel {
             errorMessage = error.localizedDescription
         }
     }
+
+    /// Backs drag-and-drop from Finder, from within the app's own file list,
+    /// or onto a sidebar row — `directory` is wherever the drop landed
+    /// (a folder row, a sidebar favorite, or the current folder's background).
+    func performDrop(urls: [URL], into directory: URL, move: Bool, currentDirectory: URL) {
+        guard !urls.isEmpty else { return }
+        do {
+            if move {
+                try FileOperationsService.moveItems(urls, to: directory)
+            } else {
+                try FileOperationsService.copyItems(urls, to: directory)
+            }
+            if directory.standardizedFileURL == currentDirectory.standardizedFileURL {
+                reload(directory: currentDirectory)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }

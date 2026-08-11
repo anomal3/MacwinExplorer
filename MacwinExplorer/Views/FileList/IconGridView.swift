@@ -21,12 +21,7 @@ struct IconGridView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(viewModel.sortedItems) { item in
-                    IconGridCell(item: item, isSelected: viewModel.selection.contains(item.url))
-                        .onTapGesture(count: 2) {
-                            if item.isDirectory { onNavigate(item.url) } else { onOpenFile(item.url) }
-                        }
-                        .simultaneousGesture(TapGesture().onEnded { handleSingleClick(item) })
-                        .contextMenu { contextMenuContent(for: item) }
+                    cell(for: item)
                 }
             }
             .padding(16)
@@ -36,6 +31,10 @@ struct IconGridView: View {
             Color(nsColor: .textBackgroundColor)
                 .onTapGesture { viewModel.selection.removeAll() }
         )
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            handleDrop(providers: providers, into: currentDirectory)
+            return true
+        }
         .alert(
             "Переименовать",
             isPresented: Binding(get: { renamingItem != nil }, set: { if !$0 { renamingItem = nil } })
@@ -48,6 +47,42 @@ struct IconGridView: View {
                 }
                 renamingItem = nil
             }
+        }
+    }
+
+    @ViewBuilder
+    private func cell(for item: FileSystemItem) -> some View {
+        IconGridCell(item: item, isSelected: viewModel.selection.contains(item.url))
+            .onTapGesture(count: 2) { openOrNavigate(item) }
+            .simultaneousGesture(TapGesture().onEnded { handleSingleClick(item) })
+            .contextMenu { contextMenuContent(for: item) }
+            .onDrag { NSItemProvider(object: item.url as NSURL) }
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                handleDrop(providers: providers, into: item.isDirectory ? item.url : currentDirectory)
+                return true
+            }
+    }
+
+    private func openOrNavigate(_ item: FileSystemItem) {
+        if item.isDirectory { onNavigate(item.url) } else { onOpenFile(item.url) }
+    }
+
+    private func handleDrop(providers: [NSItemProvider], into directory: URL) {
+        var collected: [URL] = []
+        let group = DispatchGroup()
+        for provider in providers where provider.canLoadObject(ofClass: URL.self) {
+            group.enter()
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                DispatchQueue.main.async {
+                    if let url { collected.append(url) }
+                    group.leave()
+                }
+            }
+        }
+        group.notify(queue: .main) {
+            guard !collected.isEmpty else { return }
+            let move = DragDropDefaultAction.resolved() == .move
+            viewModel.performDrop(urls: collected, into: directory, move: move, currentDirectory: currentDirectory)
         }
     }
 

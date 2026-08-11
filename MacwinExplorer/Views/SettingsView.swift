@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.commandBarStyle) private var commandBarStyle: CommandBarStyle = .iconAndText
     @AppStorage(SettingsKeys.confirmBeforeQuit) private var confirmBeforeQuit = true
     @AppStorage(SettingsKeys.showMenuBarIcon) private var showMenuBarIcon = false
+    @AppStorage(SettingsKeys.dragDropDefaultAction) private var dragDropDefaultAction: DragDropDefaultAction = .copy
 
     @State private var hasFullDiskAccess = PermissionsService.hasFullDiskAccess()
     @State private var showFDAGuide = false
@@ -90,6 +91,17 @@ struct SettingsView: View {
                         }
                     }
                 }
+            }
+
+            Section("Перетаскивание файлов") {
+                Picker("По умолчанию", selection: $dragDropDefaultAction) {
+                    ForEach(DragDropDefaultAction.allCases) { action in
+                        Text(action.label).tag(action)
+                    }
+                }
+                Text("Удерживайте ⌥ чтобы всегда скопировать, ⌘ чтобы всегда переместить — независимо от этой настройки.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Выход из приложения") {

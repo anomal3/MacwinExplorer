@@ -90,6 +90,9 @@ struct FileTableView: NSViewRepresentable {
 
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
+        tableView.registerForDraggedTypes([.fileURL])
+        tableView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
+        tableView.setDraggingSourceOperationMask([.copy, .move], forLocal: false)
         tableView.contextMenuProvider = { row in context.coordinator.buildContextMenu(for: row) }
         tableView.onCopy = { context.coordinator.copySelected() }
         tableView.onCut = { context.coordinator.cutSelected() }
@@ -262,6 +265,46 @@ struct FileTableView: NSViewRepresentable {
             let items = viewModel.sortedItems
             let selectedURLs = tableView.selectedRowIndexes.compactMap { $0 < items.count ? items[$0].url : nil }
             viewModel.selection = Set(selectedURLs)
+        }
+
+        // MARK: - Drag and drop
+
+        func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+            guard row < viewModel.sortedItems.count else { return nil }
+            return viewModel.sortedItems[row].url as NSURL
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            validateDrop info: NSDraggingInfo,
+            proposedRow row: Int,
+            proposedDropOperation dropOperation: NSTableView.DropOperation
+        ) -> NSDragOperation {
+            guard info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: nil) else { return [] }
+            let items = viewModel.sortedItems
+            let droppingOnFolder = dropOperation == .on && row >= 0 && row < items.count && items[row].isDirectory
+            if !droppingOnFolder {
+                // Redirect anywhere else (between rows, empty area) to a
+                // single whole-view highlight meaning "drop into this folder".
+                tableView.setDropRow(-1, dropOperation: .on)
+            }
+            return DragDropDefaultAction.resolved() == .copy ? .copy : .move
+        }
+
+        func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+            guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty else {
+                return false
+            }
+            let items = viewModel.sortedItems
+            let destination: URL
+            if dropOperation == .on, row >= 0, row < items.count, items[row].isDirectory {
+                destination = items[row].url
+            } else {
+                destination = currentDirectory
+            }
+            let move = DragDropDefaultAction.resolved() == .move
+            viewModel.performDrop(urls: urls, into: destination, move: move, currentDirectory: currentDirectory)
+            return true
         }
 
         @objc func doubleClicked(_ sender: NSTableView) {

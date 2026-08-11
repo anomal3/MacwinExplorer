@@ -22,6 +22,7 @@ struct SidebarOutlineView: NSViewRepresentable {
     let viewModel: SidebarViewModel
     var onSelect: (URL) -> Void
     var onConnectNetworkShare: () -> Void
+    var onDropFiles: (_ urls: [URL], _ destination: URL, _ move: Bool) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
         let outlineView = FavoritesCapableOutlineView()
@@ -31,6 +32,7 @@ struct SidebarOutlineView: NSViewRepresentable {
         outlineView.floatsGroupRows = false
         outlineView.dataSource = context.coordinator
         outlineView.delegate = context.coordinator
+        outlineView.registerForDraggedTypes([.fileURL])
         outlineView.contextMenuProvider = { node in context.coordinator.buildContextMenu(for: node) }
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SidebarColumn"))
@@ -49,6 +51,7 @@ struct SidebarOutlineView: NSViewRepresentable {
         context.coordinator.viewModel = viewModel
         context.coordinator.onSelect = onSelect
         context.coordinator.onConnectNetworkShare = onConnectNetworkShare
+        context.coordinator.onDropFiles = onDropFiles
         guard let outlineView = nsView.documentView as? NSOutlineView else { return }
         outlineView.reloadData()
         for node in viewModel.rootNodes {
@@ -57,18 +60,25 @@ struct SidebarOutlineView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel, onSelect: onSelect, onConnectNetworkShare: onConnectNetworkShare)
+        Coordinator(viewModel: viewModel, onSelect: onSelect, onConnectNetworkShare: onConnectNetworkShare, onDropFiles: onDropFiles)
     }
 
     final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
         var viewModel: SidebarViewModel
         var onSelect: (URL) -> Void
         var onConnectNetworkShare: () -> Void
+        var onDropFiles: (_ urls: [URL], _ destination: URL, _ move: Bool) -> Void
 
-        init(viewModel: SidebarViewModel, onSelect: @escaping (URL) -> Void, onConnectNetworkShare: @escaping () -> Void) {
+        init(
+            viewModel: SidebarViewModel,
+            onSelect: @escaping (URL) -> Void,
+            onConnectNetworkShare: @escaping () -> Void,
+            onDropFiles: @escaping (_ urls: [URL], _ destination: URL, _ move: Bool) -> Void
+        ) {
             self.viewModel = viewModel
             self.onSelect = onSelect
             self.onConnectNetworkShare = onConnectNetworkShare
+            self.onDropFiles = onDropFiles
         }
 
         private func node(_ item: Any?) -> SidebarNode? { item as? SidebarNode }
@@ -167,6 +177,44 @@ struct SidebarOutlineView: NSViewRepresentable {
                     sharesStore.updateLastMountPath(path, for: connection)
                     selectHandler(URL(fileURLWithPath: path))
                 }
+            }
+        }
+
+        // MARK: - Drag and drop (files dropped from the file list or from Finder)
+
+        func outlineView(
+            _ outlineView: NSOutlineView,
+            validateDrop info: NSDraggingInfo,
+            proposedItem item: Any?,
+            proposedChildIndex index: Int
+        ) -> NSDragOperation {
+            guard let target = node(item), dropTarget(for: target) != nil else { return [] }
+            guard info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: nil) else { return [] }
+            outlineView.setDropItem(item, dropChildIndex: NSOutlineViewDropOnItemIndex)
+            return DragDropDefaultAction.resolved() == .copy ? .copy : .move
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
+            guard let target = node(item), let destination = dropTarget(for: target) else { return false }
+            guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty else {
+                return false
+            }
+            onDropFiles(urls, destination, DragDropDefaultAction.resolved() == .move)
+            return true
+        }
+
+        /// Only real folders (favorite / volume / folder / mounted network
+        /// share) can receive a drop — not section headers or the
+        /// "connect a share" action row.
+        private func dropTarget(for node: SidebarNode) -> URL? {
+            switch node.kind {
+            case .favorite, .volume, .folder:
+                return node.url
+            case .networkShare:
+                guard let url = node.url, FileManager.default.fileExists(atPath: url.path) else { return nil }
+                return url
+            case .section, .networkAction:
+                return nil
             }
         }
 
