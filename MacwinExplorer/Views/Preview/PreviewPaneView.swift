@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Right-hand preview pane, toggled from Settings, the command bar button,
 /// or its own close button — mirrors Windows Explorer's preview pane.
@@ -41,12 +42,34 @@ struct PreviewPaneView: View {
         } else if selectedItems.isEmpty, FileSystemService.isVolumeRoot(currentDirectory) {
             VolumeUsagePreviewView(url: currentDirectory)
         } else if let item = singleSelected, !item.isDirectory {
-            QuickLookPreview(url: item.url)
+            if Self.isProbablyText(item.url) {
+                TextFilePreviewView(url: item.url)
+            } else {
+                QuickLookPreview(url: item.url)
+            }
         } else if let item = singleSelected, item.isDirectory {
             FolderPreviewView(item: item)
         } else {
             PreviewEmptyState()
         }
+    }
+
+    /// QuickLook's built-in text generator only kicks in for extensions
+    /// registered with a `public.text`-conforming UTI. Plenty of legitimate
+    /// source/text files (`.cs`, `.csproj`, …) aren't registered that way
+    /// and show a blank "no preview" state instead of their contents, so
+    /// sniff the file itself as a fallback: no extension check needed for
+    /// known text types (QuickLook already handles those), only for the
+    /// rest — no NUL byte and valid as UTF-8 in a small sample means text.
+    private static func isProbablyText(_ url: URL) -> Bool {
+        if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .text) {
+            return false // let QuickLook's native renderer handle these
+        }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        guard let sample = try? handle.read(upToCount: 4096), !sample.isEmpty else { return false }
+        guard !sample.contains(0) else { return false }
+        return String(data: sample, encoding: .utf8) != nil
     }
 }
 

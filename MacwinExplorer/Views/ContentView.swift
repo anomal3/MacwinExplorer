@@ -131,6 +131,12 @@ struct ContentView: View {
             guard let url = notification.object as? URL else { return }
             navigate(to: url)
         }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in
+            sidebar.reload()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in
+            sidebar.reload()
+        }
         .sheet(isPresented: $showFDAGuide) {
             FullDiskAccessGuideView()
         }

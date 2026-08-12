@@ -1,29 +1,41 @@
 import Foundation
 import AppKit
 
-/// Drives Terminal.app via Apple Events. The first call triggers the
-/// standard macOS "MacwinExplorer wants to control Terminal" consent prompt —
-/// that's expected and only asked once.
+/// Drives Terminal.app.
+///
+/// "New window" shells out to `open -a Terminal <path>` instead of
+/// AppleScript's `do script`: `do script` silently reuses the frontmost
+/// window whenever its selected tab has no running process (i.e. it's just
+/// sitting at an idle prompt) — the common case — which reads as "nothing
+/// happened, focus just moved". `open` sends Terminal a plain "open
+/// document" Apple Event, which has no such fallback and always creates a
+/// genuinely new window; it also needs no extra permissions.
+///
+/// "New tab" has no non-GUI equivalent — Terminal's AppleScript dictionary
+/// has no "make new tab" command — so it's simulated via ⌘T through
+/// Accessibility, which requires the user to grant MacwinExplorer
+/// Accessibility access once (System Settings ▸ Privacy & Security ▸
+/// Accessibility). Without it the keystroke silently fails and only
+/// `activate` runs, which looks identical to the `do script` reuse bug this
+/// service otherwise avoids — so this is gated on that permission and
+/// prompts for it instead of failing silently.
 enum TerminalService {
     static func openNewWindow(at url: URL) {
-        // A bare `do script` reuses the frontmost window instead of creating
-        // a new one whenever that window's selected tab has no running
-        // process (i.e. it's just sitting at an idle prompt) — which is
-        // exactly the common case, and reads as "nothing happened, focus
-        // just moved". Explicitly triggering ⌘N first (same trick already
-        // used below for tabs) guarantees a real new window every time.
-        let literal = appleScriptLiteral(url.path)
-        run(script: """
-        tell application "Terminal"
-            activate
-            tell application "System Events" to keystroke "n" using command down
-            delay 0.2
-            do script "cd " & quoted form of \(literal) in front window
-        end tell
-        """)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", url.path]
+        do {
+            try process.run()
+        } catch {
+            NSLog("TerminalService: failed to launch Terminal: \(error)")
+        }
     }
 
     static func openNewTab(at url: URL) {
+        guard PermissionsService.hasAccessibilityAccess() else {
+            PermissionsService.promptForAccessibilityAccess()
+            return
+        }
         let literal = appleScriptLiteral(url.path)
         run(script: """
         tell application "Terminal"

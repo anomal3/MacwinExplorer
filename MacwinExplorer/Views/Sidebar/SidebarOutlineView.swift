@@ -53,10 +53,7 @@ struct SidebarOutlineView: NSViewRepresentable {
         context.coordinator.onConnectNetworkShare = onConnectNetworkShare
         context.coordinator.onDropFiles = onDropFiles
         guard let outlineView = nsView.documentView as? NSOutlineView else { return }
-        outlineView.reloadData()
-        for node in viewModel.rootNodes {
-            outlineView.expandItem(node)
-        }
+        context.coordinator.reloadIfNeeded(outlineView)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -68,6 +65,13 @@ struct SidebarOutlineView: NSViewRepresentable {
         var onSelect: (URL) -> Void
         var onConnectNetworkShare: () -> Void
         var onDropFiles: (_ urls: [URL], _ destination: URL, _ move: Bool) -> Void
+        /// `reload()` rebuilds `rootNodes` with brand-new `SidebarNode`
+        /// objects every time it runs, even when nothing actually changed,
+        /// and SwiftUI calls `updateNSView` on nearly every re-render of the
+        /// window — so reloading unconditionally would reset the outline
+        /// view's selection/scroll position constantly. Reload only when the
+        /// visible structure actually differs.
+        private var displayedSnapshot = ""
 
         init(
             viewModel: SidebarViewModel,
@@ -79,6 +83,25 @@ struct SidebarOutlineView: NSViewRepresentable {
             self.onSelect = onSelect
             self.onConnectNetworkShare = onConnectNetworkShare
             self.onDropFiles = onDropFiles
+        }
+
+        func reloadIfNeeded(_ outlineView: NSOutlineView) {
+            let current = Self.snapshot(viewModel.rootNodes)
+            guard current != displayedSnapshot else { return }
+            displayedSnapshot = current
+            outlineView.reloadData()
+            for node in viewModel.rootNodes {
+                outlineView.expandItem(node)
+            }
+        }
+
+        private static func snapshot(_ nodes: [SidebarNode]) -> String {
+            nodes.map { section in
+                let children = section.children.map {
+                    "\($0.kind)|\($0.title)|\($0.url?.path ?? "")|\($0.favoriteID?.uuidString ?? "")|\($0.networkShareID?.uuidString ?? "")"
+                }.joined(separator: ",")
+                return "\(section.title):[\(children)]"
+            }.joined(separator: ";")
         }
 
         private func node(_ item: Any?) -> SidebarNode? { item as? SidebarNode }

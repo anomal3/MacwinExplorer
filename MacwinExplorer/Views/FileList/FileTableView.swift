@@ -117,7 +117,7 @@ struct FileTableView: NSViewRepresentable {
         context.coordinator.onShowProperties = onShowProperties
         context.coordinator.onFavoritesChanged = onFavoritesChanged
         guard let tableView = nsView.documentView as? ExplorerTableView else { return }
-        tableView.reloadData()
+        context.coordinator.reloadIfNeeded(tableView)
 
         if renameRequested {
             context.coordinator.startRenameSelected()
@@ -146,6 +146,16 @@ struct FileTableView: NSViewRepresentable {
         var onShowProperties: ([FileSystemItem]) -> Void
         var onFavoritesChanged: () -> Void
         weak var tableView: NSTableView?
+        /// SwiftUI calls `updateNSView` on essentially every re-render of the
+        /// whole window (typing in the address bar, hovering the command
+        /// bar, etc.), not just when the directory contents actually
+        /// changed. Unconditionally calling `reloadData()` there fights the
+        /// table's own in-flight click/selection handling — a click can
+        /// land, then get reloaded out from under itself before it visibly
+        /// sticks, so it looks like the first click did nothing and a
+        /// second one is needed. Only reload when the displayed items
+        /// actually changed.
+        private var displayedItems: [FileSystemItem] = []
 
         init(
             viewModel: FileListViewModel,
@@ -163,6 +173,13 @@ struct FileTableView: NSViewRepresentable {
             self.onOpenFile = onOpenFile
             self.onShowProperties = onShowProperties
             self.onFavoritesChanged = onFavoritesChanged
+        }
+
+        func reloadIfNeeded(_ tableView: NSTableView) {
+            let current = viewModel.sortedItems
+            guard current != displayedItems else { return }
+            displayedItems = current
+            tableView.reloadData()
         }
 
         func numberOfRows(in tableView: NSTableView) -> Int {
