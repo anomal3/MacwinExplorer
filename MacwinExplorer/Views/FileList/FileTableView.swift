@@ -56,6 +56,7 @@ struct FileTableView: NSViewRepresentable {
     var onNavigate: (URL) -> Void
     var onOpenFile: (URL) -> Void
     var onShowProperties: ([FileSystemItem]) -> Void
+    var onFavoritesChanged: () -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
         let tableView = ExplorerTableView()
@@ -114,6 +115,7 @@ struct FileTableView: NSViewRepresentable {
         context.coordinator.onNavigate = onNavigate
         context.coordinator.onOpenFile = onOpenFile
         context.coordinator.onShowProperties = onShowProperties
+        context.coordinator.onFavoritesChanged = onFavoritesChanged
         guard let tableView = nsView.documentView as? ExplorerTableView else { return }
         tableView.reloadData()
 
@@ -130,7 +132,8 @@ struct FileTableView: NSViewRepresentable {
             currentDirectory: currentDirectory,
             onNavigate: onNavigate,
             onOpenFile: onOpenFile,
-            onShowProperties: onShowProperties
+            onShowProperties: onShowProperties,
+            onFavoritesChanged: onFavoritesChanged
         )
     }
 
@@ -141,6 +144,7 @@ struct FileTableView: NSViewRepresentable {
         var onNavigate: (URL) -> Void
         var onOpenFile: (URL) -> Void
         var onShowProperties: ([FileSystemItem]) -> Void
+        var onFavoritesChanged: () -> Void
         weak var tableView: NSTableView?
 
         init(
@@ -149,7 +153,8 @@ struct FileTableView: NSViewRepresentable {
             currentDirectory: URL,
             onNavigate: @escaping (URL) -> Void,
             onOpenFile: @escaping (URL) -> Void,
-            onShowProperties: @escaping ([FileSystemItem]) -> Void
+            onShowProperties: @escaping ([FileSystemItem]) -> Void,
+            onFavoritesChanged: @escaping () -> Void
         ) {
             self.viewModel = viewModel
             self.favoritesStore = favoritesStore
@@ -157,6 +162,7 @@ struct FileTableView: NSViewRepresentable {
             self.onNavigate = onNavigate
             self.onOpenFile = onOpenFile
             self.onShowProperties = onShowProperties
+            self.onFavoritesChanged = onFavoritesChanged
         }
 
         func numberOfRows(in tableView: NSTableView) -> Int {
@@ -367,6 +373,9 @@ struct FileTableView: NSViewRepresentable {
                 terminalItem.submenu = terminalSubmenu
                 menu.addItem(terminalItem)
 
+                let revealItem = menu.addItem(withTitle: "Открыть в Finder", action: #selector(revealSelectedInFinderAction), keyEquivalent: "")
+                revealItem.target = self
+
                 if item.isDirectory {
                     let alreadyFavorite = favoritesStore.contains(item.url)
                     let favoriteItem = menu.addItem(
@@ -416,6 +425,9 @@ struct FileTableView: NSViewRepresentable {
                 terminalItem.submenu = terminalSubmenu
                 menu.addItem(terminalItem)
 
+                let revealItem = menu.addItem(withTitle: "Открыть в Finder", action: #selector(revealCurrentDirectoryInFinderAction), keyEquivalent: "")
+                revealItem.target = self
+
                 if ClipboardService.canPaste {
                     let pasteItem = menu.addItem(withTitle: "Вставить", action: #selector(pasteContextAction), keyEquivalent: "")
                     pasteItem.target = self
@@ -440,6 +452,7 @@ struct FileTableView: NSViewRepresentable {
         @objc private func addFavoriteContextAction(_ sender: NSMenuItem) {
             guard let url = sender.representedObject as? URL else { return }
             favoritesStore.add(url)
+            onFavoritesChanged()
         }
 
         @objc private func openTerminalWindowAction(_ sender: NSMenuItem) {
@@ -450,6 +463,15 @@ struct FileTableView: NSViewRepresentable {
         @objc private func openTerminalTabAction(_ sender: NSMenuItem) {
             guard let url = sender.representedObject as? URL else { return }
             TerminalService.openNewTab(at: url)
+        }
+
+        @objc private func revealSelectedInFinderAction() {
+            let urls = viewModel.selection.isEmpty ? [] : Array(viewModel.selection)
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+        }
+
+        @objc private func revealCurrentDirectoryInFinderAction() {
+            NSWorkspace.shared.activateFileViewerSelecting([currentDirectory])
         }
     }
 }

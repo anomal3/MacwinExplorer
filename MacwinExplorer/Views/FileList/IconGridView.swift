@@ -11,6 +11,7 @@ struct IconGridView: View {
     var onNavigate: (URL) -> Void
     var onOpenFile: (URL) -> Void
     var onShowProperties: ([FileSystemItem]) -> Void
+    var onFavoritesChanged: () -> Void
 
     @State private var renamingItem: FileSystemItem?
     @State private var renameText = ""
@@ -111,11 +112,15 @@ struct IconGridView: View {
             Button("Новое окно") { TerminalService.openNewWindow(at: terminalDirectory) }
             Button("Новая вкладка") { TerminalService.openNewTab(at: terminalDirectory) }
         }
+        Button("Открыть в Finder") { NSWorkspace.shared.activateFileViewerSelecting(urls) }
         if item.isDirectory {
             if favoritesStore.contains(item.url) {
                 Text("Уже в избранном")
             } else {
-                Button("Добавить в избранное") { favoritesStore.add(item.url) }
+                Button("Добавить в избранное") {
+                    favoritesStore.add(item.url)
+                    onFavoritesChanged()
+                }
             }
         }
         Divider()

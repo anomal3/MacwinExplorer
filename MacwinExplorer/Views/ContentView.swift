@@ -84,7 +84,8 @@ struct ContentView: View {
                                 renameRequested: $renameRequested,
                                 onNavigate: { url in navigate(to: url) },
                                 onOpenFile: { url in NSWorkspace.shared.open(url) },
-                                onShowProperties: { items in showProperties(for: items) }
+                                onShowProperties: { items in showProperties(for: items) },
+                                onFavoritesChanged: { sidebar.reload() }
                             )
                         case .icons:
                             IconGridView(
@@ -93,7 +94,8 @@ struct ContentView: View {
                                 currentDirectory: navigation.currentURL,
                                 onNavigate: { url in navigate(to: url) },
                                 onOpenFile: { url in NSWorkspace.shared.open(url) },
-                                onShowProperties: { items in showProperties(for: items) }
+                                onShowProperties: { items in showProperties(for: items) },
+                                onFavoritesChanged: { sidebar.reload() }
                             )
                         }
                     }
